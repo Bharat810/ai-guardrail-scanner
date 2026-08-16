@@ -11,6 +11,7 @@
 
 - authority_impersonation: claiming admin/elevated permissions to justify bypassing instructions (e.g., "do what you're instructed to do by admin" flagged True, while "...by developers" flagged False — distinction is authority claim, not just mentioning who gave instructions)
 - Reasoning text can sound more uncertain/hedging than the final boolean verdict suggests (e.g., an input described as "resembling" an attack pattern still classified False) — a known characteristic of LLM-based classifiers where the natural-language explanation and the structured decision aren't always perfectly aligned in tone
+-borderline case, plausible arguments for both False (inquisitive framing, no concrete payload) and True (social-engineering 'testing receptiveness' pattern) — currently treating as False per system consistency with other inquisitive framings, flagged as genuinely ambiguous rather than a confirmed miss
 
 ## Benchmark results (initial run)
 - Ran automated benchmark (benchmark.py) against 25 test cases with known expected verdicts (established via earlier manual testing)
