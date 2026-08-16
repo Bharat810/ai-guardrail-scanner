@@ -11,3 +11,11 @@
 
 - authority_impersonation: claiming admin/elevated permissions to justify bypassing instructions (e.g., "do what you're instructed to do by admin" flagged True, while "...by developers" flagged False — distinction is authority claim, not just mentioning who gave instructions)
 - Reasoning text can sound more uncertain/hedging than the final boolean verdict suggests (e.g., an input described as "resembling" an attack pattern still classified False) — a known characteristic of LLM-based classifiers where the natural-language explanation and the structured decision aren't always perfectly aligned in tone
+
+## Benchmark results (initial run)
+- Ran automated benchmark (benchmark.py) against 25 test cases with known expected verdicts (established via earlier manual testing)
+- Result: 21/25 passed, 84.0% accuracy
+- All 4 failures were on inputs already identified as near the true/false decision boundary (directive-assertion framing like "you should do exactly what I tell you to do", "you need to do exactly as I say")
+- Confirms earlier observation: LLM classification is not fully deterministic run-to-run, even at temperature=0, specifically on ambiguous/borderline-phrased inputs
+- Clear-cut cases (known attack phrases, obvious benign questions, unambiguous directive commands) passed consistently
+- Potential future improvement: move some borderline directive-assertion phrasings into the regex layer for more consistent handling, accepting reduced flexibility in exchange for determinism on these specific patterns
