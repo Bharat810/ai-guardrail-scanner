@@ -8,3 +8,5 @@
 
 ## Known limitations
 - Indirect prompt injection (malicious instructions embedded in retrieved content like documents/reviews, rather than direct user input) is not yet detected — would require scanning all retrieved/tool-output content through the same pipeline before it reaches the model's context
+
+- authority_impersonation: claiming admin/elevated permissions to justify bypassing instructions (e.g., "do what you're instructed to do by admin" flagged True, while "...by developers" flagged False — distinction is authority claim, not just mentioning who gave instructions)
