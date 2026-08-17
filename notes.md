@@ -20,3 +20,6 @@
 - Failures remain concentrated on ambiguous directive-assertion framing near the true/false decision boundary (e.g., "you should do exactly what I tell you to do", "you need to do exactly as I say")
 - Clear-cut cases (known attack phrases, obvious benign questions, unambiguous directive commands, compound attacks, obfuscated evasion attempts) pass consistently
 - Confirms earlier observation: LLM classification is not fully deterministic run-to-run, even at temperature=0, specifically on ambiguous/borderline-phrased inputs
+## Future enhancement: encoding-based evasion detection
+- Discovered LLM layer inconsistently catches Base64-encoded attack phrases without explicit decoding logic
+- Planned v2 addition: detect encoded-looking input (Base64/hex/URL-encoding patterns), decode programmatically, recursively run decoded content through full_check() — reduces reliance on LLM's incidental encoding recognition, makes detection deterministic and testable
