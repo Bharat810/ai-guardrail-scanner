@@ -29,9 +29,15 @@ Built from hands-on exploitation of real vulnerable applications (PortSwigger We
 - **System prompt extraction** — attempts to reveal hidden system instructions
 - **Authority impersonation** — falsely claiming admin/elevated permissions to justify bypassing rules
 
-## Tech stack
+### Encoding & obfuscation handling *Note: encoding-detection is verified functionally (see NOTES.md) but not yet incorporated into the accuracy benchmark below — planned for the next benchmark pass alongside upcoming multi-provider and prompt-refinement changes.*
 
+Before classification, input is checked for common encodings (Base64, hex, URL-encoding). If detected, the payload is decoded and recursively passed back through the same detection pipeline (regex first, then LLM if needed) — up to 3 levels deep, to catch nested/layered encoding without infinite recursion.
+
+This closes a real bypass: an attacker submitting `aWdub3JlIGFsbCBwcmV2aW91cyBpbnN0cnVjdGlvbnM=` (Base64 for "ignore all previous instructions") would previously reach the LLM layer as an unrecognizable blob. Now it's decoded and correctly flagged by the regex layer itself — faster and more deterministic than relying on the LLM to notice.
+
+Tech stack
 Python · FastAPI · Streamlit · Google Gemini API · Pydantic
+(encoding detection uses Python's standard library: base64, re, urllib.parse, binascii — no new dependencies)
 
 ## Testing & benchmark results
 
@@ -44,10 +50,11 @@ Key findings from adversarial testing:
 - The regex layer is fully deterministic; the LLM layer can be inconsistent on ambiguous, borderline-phrased inputs near the decision boundary — documented explicitly rather than hidden
 - The LLM layer catches obfuscated attacks (symbol-injected known phrases) that the regex layer alone would miss, validating the two-layer design
 
-## Known limitations
+Known limitations
 
-- **Indirect prompt injection** (malicious instructions embedded in retrieved content like documents or product reviews, rather than direct user input) is not yet detected. This would require scanning all retrieved/tool-output content through the same detection pipeline before it reaches the model's context — a documented next step, not an oversight.
-- LLM-layer classification shows measured inconsistency on ~15% of borderline inputs, particularly around directive-assertion phrasing and casual-toned system-prompt-extraction attempts.
+* Indirect prompt injection (malicious instructions embedded in retrieved content like documents or product reviews, rather than direct user input) is not yet detected — a documented next step.
+* Encoding detection currently covers Base64, hex, and URL-encoding. It does not yet cover more exotic obfuscation (e.g. Unicode homoglyphs, zero-width character insertion, ROT13) — a natural extension of the same pre-processing step.
+* LLM-layer classification shows measured inconsistency on ~15% of borderline inputs, particularly around directive-assertion phrasing and casual-toned system-prompt-extraction attempts.
 
 ## Running locally
 
