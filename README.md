@@ -3,6 +3,7 @@
 A two-layer security service that detects prompt injection, jailbreak attempts, and LLM-agency exploitation before they reach a language model — built and validated using real attack techniques from PortSwigger's Web LLM Attacks labs.
 
 **Live demo:** [ai-guardrail-scanner.streamlit.app](https://ai-guardrail-scanner.streamlit.app)
+<img width="800" alt="AI Guardrail Scanner Live Demo" src="https://github.com/user-attachments/assets/672f392f-a83c-4722-80ea-061bb7f4dc14" />
 
 ## What it does
 
