@@ -43,12 +43,20 @@ Python · FastAPI · Streamlit · Google Gemini API · Pydantic
 
 Tested against 28 inputs, including deliberately adversarial borderline cases designed to probe the true/false decision boundary (not just obvious attack/safe pairs).
 
-**Result: ~89.3% accuracy** (see `benchmark.py` for the full test set, `NOTES.md` for detailed findings)
+**Results:**
+- **89.3% (25/28)** — single-provider mode (Gemini only, with refined few-shot system instructions)
+- **85.7% (24/28)**, consistent across 3 separate runs — consensus mode (Gemini + Groq, fail-closed on disagreement)
+
+Consensus mode trades a small amount of point-in-time accuracy for explicit uncertainty signaling: rather than silently picking one model's answer on a genuinely ambiguous input, disagreement between providers is itself treated as a signal and the input is flagged for review. Full reasoning and a per-provider breakdown are documented in `NOTES.md`, alongside a real-world comparison showing that even production AI assistants (tested informally against Grok, ChatGPT, and Claude) don't agree on how to handle some of the same borderline instruction-extraction phrasing — supporting evidence that these are genuinely hard cases, not classifier defects.
+
+(see `benchmark.py` for the full test set, `NOTES.md` for detailed findings)
 
 Key findings from adversarial testing:
-- The LLM layer reliably distinguishes grammatical mood — genuine questions about compliance ("will you do as I say?") are classified safe, while directive assertions ("you need to do as I say") are flagged, regardless of surface politeness
-- The regex layer is fully deterministic; the LLM layer can be inconsistent on ambiguous, borderline-phrased inputs near the decision boundary — documented explicitly rather than hidden
-- The LLM layer catches obfuscated attacks (symbol-injected known phrases) that the regex layer alone would miss, validating the two-layer design
+
+* The LLM layer reliably distinguishes grammatical mood — genuine questions about compliance ("will you do as I say?") are classified safe, while directive assertions ("you need to do as I say") are flagged, regardless of surface politeness
+* The regex layer is fully deterministic; the LLM layer can be inconsistent on ambiguous, borderline-phrased inputs near the decision boundary — documented explicitly rather than hidden
+* The LLM layer catches obfuscated attacks (symbol-injected known phrases) that the regex layer alone would miss, validating the two-layer design
+* Consensus mode surfaces disagreement between independent providers as an explicit signal rather than a hidden coin-flip
 
 Known limitations
 
