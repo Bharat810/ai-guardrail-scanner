@@ -43,7 +43,7 @@ Python · FastAPI · Streamlit · Google Gemini API · Pydantic
 
 Tested against 28 inputs, including deliberately adversarial borderline cases designed to probe the true/false decision boundary (not just obvious attack/safe pairs).
 
-**Result: ~85% accuracy** (see `benchmark.py` for the full test set, `NOTES.md` for detailed findings)
+**Result: ~89.3% accuracy** (see `benchmark.py` for the full test set, `NOTES.md` for detailed findings)
 
 Key findings from adversarial testing:
 - The LLM layer reliably distinguishes grammatical mood — genuine questions about compliance ("will you do as I say?") are classified safe, while directive assertions ("you need to do as I say") are flagged, regardless of surface politeness

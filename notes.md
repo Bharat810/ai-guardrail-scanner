@@ -20,7 +20,7 @@
 - Potential future improvement: move some borderline directive-assertion phrasings into the regex layer for more consistent handling, accepting reduced flexibility in exchange for determinism on these specific patterns
 
 ## Benchmark results
-- 28 test cases, 23 passed, 5 failed — 82.1% accuracy (previously 84.0% on 25 cases; consistent range as test set expanded)
+- 28 test cases, 25 passed, 3 failed — 89.3% accuracy (previously 84.0% on 25 cases; consistent range as test set expanded)
 - Failures remain concentrated on ambiguous directive-assertion framing near the true/false decision boundary (e.g., "you should do exactly what I tell you to do", "you need to do exactly as I say")
 - Clear-cut cases (known attack phrases, obvious benign questions, unambiguous directive commands, compound attacks, obfuscated evasion attempts) pass consistently
 - Confirms earlier observation: LLM classification is not fully deterministic run-to-run, even at temperature=0, specifically on ambiguous/borderline-phrased inputs
@@ -31,3 +31,15 @@
 - Implemented: pre-processing step detects encoded-looking input (Base64/hex/URL-encoding patterns via regex + successful decode + printable-text check), decodes it, and recursively runs the decoded content through `full_check()` — makes detection deterministic and testable instead of relying on incidental LLM recognition
 - False-positive guards required: minimum length threshold (8 chars) and correct format/padding per encoding, since short natural-language strings can otherwise accidentally match Base64's charset pattern and "decode" into garbage
 - Recursion depth capped at 3 to bound processing on adversarially nested encoding
+
+## Few-shot prompt refinement (added 19-08-2026)
+
+**Problem:** initial system instruction was a single generic sentence; LLM layer showed inconsistency on directive-assertion phrasing and casual-toned extraction attempts (see earlier findings).
+
+**Approach:** restructured SYSTEM_INSTRUCTION with explicit category definitions, an explicit "question mood overrides trigger words" rule, and contrastive few-shot examples using near-identical phrasing that differs only in grammatical mood (e.g. "you need to do exactly as I say" vs. "will you do exactly as I say?").
+
+**Result:** benchmark accuracy improved from 85.2% (23/27) to 89.3% (25/28).
+
+**Observed instability during refinement:** an initial prompt version fixed the original 4 known failures but *introduced 4 new ones* — the model over-generalized "question mood = safe" to any input containing a question mark, including genuine commands with a trailing casual tag ("...ok?"). A follow-up contrastive example fixed that specific case, but in doing so flipped a previously-passing case ("i need you help, please do exactly as i say") to failing. Net accuracy stayed at 89.3%, but the specific failing cases changed.
+
+**Takeaway:** confirms prompt changes have non-local effects on LLM classification — a fix targeted at one case can shift the decision boundary in ways that affect unrelated cases. This reinforces treating prompt-based classification as inherently probabilistic near the boundary, not something to be perfected through iterative one-off patching. Further improvement would likely need either more/better contrastive examples covering the whole boundary at once, or moving stable directive-assertion patterns into the deterministic regex layer instead (previously noted as a future option).
