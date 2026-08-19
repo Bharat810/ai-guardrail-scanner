@@ -44,10 +44,10 @@ Python · FastAPI · Streamlit · Google Gemini API · Pydantic
 Tested against 28 inputs, including deliberately adversarial borderline cases designed to probe the true/false decision boundary (not just obvious attack/safe pairs).
 
 **Results:**
-- **89.3% (25/28)** — single-provider mode (Gemini only, with refined few-shot system instructions)
-- **85.7% (24/28)**, consistent across 3 separate runs — consensus mode (Gemini + Groq, fail-closed on disagreement)
+- **89.3% (25/28)** — single-provider mode (Gemini only, with refined few-shot system instructions), plain-text test set
+- **73.5% (25/34)** — consensus mode (Gemini + Groq, fail-closed on disagreement), expanded test set including encoded (Base64) variants of known boundary cases
 
-Consensus mode trades a small amount of point-in-time accuracy for explicit uncertainty signaling: rather than silently picking one model's answer on a genuinely ambiguous input, disagreement between providers is itself treated as a signal and the input is flagged for review. Full reasoning and a per-provider breakdown are documented in `NOTES.md`, alongside a real-world comparison showing that even production AI assistants (tested informally against Grok, ChatGPT, and Claude) don't agree on how to handle some of the same borderline instruction-extraction phrasing — supporting evidence that these are genuinely hard cases, not classifier defects.
+Consensus mode trades a small amount of point-in-time accuracy for explicit uncertainty signaling: rather than silently picking one model's answer on a genuinely ambiguous input, disagreement between providers is itself treated as a signal and the input is flagged for review. Full reasoning and a per-provider breakdown are documented in `NOTES.md`, alongside a real-world comparison showing that even production AI assistants (tested informally against Grok, ChatGPT, and Claude) don't agree on how to handle some of the same borderline instruction-extraction phrasing — supporting evidence that these are genuinely hard cases, not classifier defects. One case has shown a rare false negative during testing, consistent with its documented instability — see NOTES.md for full details.
 
 (see `benchmark.py` for the full test set, `NOTES.md` for detailed findings)
 
