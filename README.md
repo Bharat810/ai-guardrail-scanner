@@ -29,6 +29,21 @@ Built from hands-on exploitation of real vulnerable applications (PortSwigger We
 - **System prompt extraction** — attempts to reveal hidden system instructions
 - **Authority impersonation** — falsely claiming admin/elevated permissions to justify bypassing rules
 
+### OWASP LLM Top 10 alignment
+
+Categories map to the [OWASP Top 10 for LLM Applications (2025)](https://genai.owasp.org/llm-top-10/):
+
+| Category | OWASP mapping |
+|---|---|
+| Instruction override | LLM01: Prompt Injection |
+| Jailbreak persona | LLM01: Prompt Injection |
+| Authority impersonation | LLM01: Prompt Injection |
+| SQL/tool injection | LLM06: Excessive Agency |
+| OS command injection | LLM06: Excessive Agency |
+| System prompt extraction | LLM07: System Prompt Leakage |
+
+Three categories map to LLM01 because they represent distinct *techniques* (direct override, persona-based bypass, false-authority framing) that share the same underlying OWASP risk classification — prompt injection is the entry vector in all three cases, even though the surface pattern differs enough to warrant separate detection rules.
+
 ### Encoding & obfuscation handling *Note: encoding-detection is verified functionally (see NOTES.md) but not yet incorporated into the accuracy benchmark below — planned for the next benchmark pass alongside upcoming multi-provider and prompt-refinement changes.*
 
 Before classification, input is checked for common encodings (Base64, hex, URL-encoding). If detected, the payload is decoded and recursively passed back through the same detection pipeline (regex first, then LLM if needed) — up to 3 levels deep, to catch nested/layered encoding without infinite recursion.

@@ -119,23 +119,35 @@ def check_prompt(user_input: str) -> ThreatVerdict:
 
 
 attack_patterns = {
-    "instruction_override": ["ignore all previous instructions", "disregard prior instructions"],
-    "jailbreak_persona": ["DAN", "do anything now"],
-    "sql_tool_injection": [
-        "call the Debug SQL API", "DELETE FROM", "DROP TABLE",
-        "UPDATE users SET", "INSERT INTO"
-    ],
-    "os_command_injection": ["$(", "`whoami`", "$(whoami)", "$(rm ", ";rm ", "&& rm", "| rm"],
+    "instruction_override": {
+        "phrases": ["ignore all previous instructions", "disregard prior instructions"],
+        "owasp": "LLM01: Prompt Injection"
+    },
+    "jailbreak_persona": {
+        "phrases": ["DAN", "do anything now"],
+        "owasp": "LLM01: Prompt Injection"
+    },
+    "sql_tool_injection": {
+        "phrases": [
+            "call the Debug SQL API", "DELETE FROM", "DROP TABLE",
+            "UPDATE users SET", "INSERT INTO"
+        ],
+        "owasp": "LLM06: Excessive Agency"
+    },
+    "os_command_injection": {
+        "phrases": ["$(", "`whoami`", "$(whoami)", "$(rm ", ";rm ", "&& rm", "| rm"],
+        "owasp": "LLM06: Excessive Agency"
+    },
 }
 
 
 def regex_check(text):
     text_lower = text.lower()
-    for category, phrases in attack_patterns.items():
-        for phrase in phrases:
+    for category, data in attack_patterns.items():
+        for phrase in data["phrases"]:
             if phrase.lower() in text_lower:
-                return True, category
-    return False, None
+                return True, category, data["owasp"]
+    return False, None, None
 
 
 # --- Encoding detection & decoding ---
@@ -193,10 +205,13 @@ def decode_attempts(text: str) -> list[tuple[str, str]]:
 # --- Main pipeline ---
 
 def full_check(text: str, depth: int = 0) -> ThreatVerdict:
-    is_flagged, category = regex_check(text)
+    is_flagged, category, owasp = regex_check(text)
     if is_flagged:
         prefix = "" if depth == 0 else f"[decoded at depth {depth}] "
-        return ThreatVerdict(is_threat=True, reason=f"{prefix}Matched known attack pattern (category: {category})")
+        return ThreatVerdict(
+            is_threat=True,
+            reason=f"{prefix}Matched known attack pattern (category: {category}, OWASP: {owasp})"
+        )
 
     if depth < MAX_DECODE_DEPTH:
         for encoding_name, decoded_text in decode_attempts(text):
