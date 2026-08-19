@@ -9,7 +9,8 @@ if st.button("Scan"):
     if user_input:
         result = full_check(user_input)
         if result.is_threat:
-            st.error(f"⚠️ THREAT DETECTED: {result.reason}")
+            owasp_line = f" ({result.owasp})" if result.owasp else ""
+            st.error(f"⚠️ THREAT DETECTED: {result.reason}{owasp_line}")
         else:
             st.success(f"✅ Safe: {result.reason}")
 
