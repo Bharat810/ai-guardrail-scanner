@@ -149,6 +149,7 @@ attack_patterns = {
     },
 }
 
+request_stats = {"regex_only": 0, "encoding_decoded": 0, "llm_consensus": 0}
 
 def regex_check(text):
     text_lower = text.lower()
@@ -216,6 +217,10 @@ def decode_attempts(text: str) -> list[tuple[str, str]]:
 def full_check(text: str, depth: int = 0) -> ThreatVerdict:
     is_flagged, category, owasp = regex_check(text)
     if is_flagged:
+        if depth == 0:
+            request_stats["regex_only"] += 1
+        else:
+            request_stats["encoding_decoded"] += 1
         prefix = "" if depth == 0 else f"[decoded at depth {depth}] "
         return ThreatVerdict(
             is_threat=True,
@@ -230,6 +235,7 @@ def full_check(text: str, depth: int = 0) -> ThreatVerdict:
                 return verdict
 
     if depth == 0:
+        request_stats["llm_consensus"] += 1
         return check_prompt(text)
 
     return ThreatVerdict(is_threat=False, reason="No known attack pattern found")

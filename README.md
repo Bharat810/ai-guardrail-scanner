@@ -54,6 +54,8 @@ Tech stack
 Python · FastAPI · Streamlit · Google Gemini API · Pydantic
 (encoding detection uses Python's standard library: base64, re, urllib.parse, binascii — no new dependencies)
 
+*Note: internal request-layer tracking shows most inputs in adversarial benchmark testing require the full LLM consensus layer rather than resolving via regex alone — expected, since the benchmark set is deliberately weighted toward ambiguous/boundary cases rather than typical traffic. See NOTES.md for the measured breakdown.*
+
 ## Testing & benchmark results
 
 Tested against 28 inputs, including deliberately adversarial borderline cases designed to probe the true/false decision boundary (not just obvious attack/safe pairs).

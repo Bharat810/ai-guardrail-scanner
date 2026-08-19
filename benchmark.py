@@ -56,3 +56,7 @@ total = passed + failed
 accuracy = (passed / total) * 100
 print(f"\n--- Benchmark Summary ---")
 print(f"Total: {total} | Passed: {passed} | Failed: {failed} | Accuracy: {accuracy:.1f}%")
+print(f"\n--- Request Layer Breakdown ---")
+from test_api import request_stats
+for layer, count in request_stats.items():
+    print(f"{layer}: {count}")
