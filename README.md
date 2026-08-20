@@ -74,12 +74,22 @@ Key findings from adversarial testing:
 * The regex layer is fully deterministic; the LLM layer can be inconsistent on ambiguous, borderline-phrased inputs near the decision boundary — documented explicitly rather than hidden
 * The LLM layer catches obfuscated attacks (symbol-injected known phrases) that the regex layer alone would miss, validating the two-layer design
 * Consensus mode surfaces disagreement between independent providers as an explicit signal rather than a hidden coin-flip
+### API access
 
-Known limitations
+The `/v1/scan-prompt` and `/v1/stats` endpoints require an API key, passed via the `x-api-key` header, and are rate-limited (10 requests/minute for scanning, 30/minute for stats) to prevent abuse of the underlying LLM API calls.
+
+For demo/testing purposes, use: `demo-key-guardrail-scanner-2026`
+
+Example:
+```bash
+curl -X POST "https://your-deployed-api/v1/scan-prompt?user_input=hello" -H "x-api-key: demo-key-guardrail-scanner-2026"
+```
+## Known limitations
 
 * Indirect prompt injection (malicious instructions embedded in retrieved content like documents or product reviews, rather than direct user input) is not yet detected — a documented next step.
 * Encoding detection currently covers Base64, hex, and URL-encoding. It does not yet cover more exotic obfuscation (e.g. Unicode homoglyphs, zero-width character insertion, ROT13) — a natural extension of the same pre-processing step.
 * LLM-layer classification shows measured inconsistency on ~15% of borderline inputs, particularly around directive-assertion phrasing and casual-toned system-prompt-extraction attempts.
+* API endpoints use a single shared demo key rather than per-user authentication — appropriate for a public portfolio demo, but would need real user-scoped API keys (and likely OAuth or similar) for multi-tenant production use
 
 ## Running locally
 
