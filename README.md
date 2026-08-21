@@ -91,6 +91,16 @@ curl -X POST "https://your-deployed-api/v1/scan-prompt?user_input=hello" -H "x-a
 * Encoding detection currently covers Base64, hex, and URL-encoding. It does not yet cover more exotic obfuscation (e.g. Unicode homoglyphs, zero-width character insertion, ROT13) — a natural extension of the same pre-processing step.
 * LLM-layer classification shows measured inconsistency on ~15% of borderline inputs, particularly around directive-assertion phrasing and casual-toned system-prompt-extraction attempts.
 * API endpoints use a single shared demo key rather than per-user authentication — appropriate for a public portfolio demo, but would need real user-scoped API keys (and likely OAuth or similar) for multi-tenant production use
+### Beyond detection: mitigating excessive agency risk
+
+This scanner detects text that resembles SQL/tool injection or OS command injection attempts (mapped to OWASP LLM06: Excessive Agency), but detection alone doesn't eliminate risk if flagged content still reaches an LLM agent with real tool access — for example, an AI-powered scanner or agent that can authenticate, crawl, and send real HTTP requests. Text-level detection is one layer of defense, not a substitute for constraining what an agent can actually do.
+
+Downstream systems integrating this scanner into an agentic pipeline should also apply defense-in-depth principles:
+- **Restrict agent credentials and access to least privilege** — an agent should only hold the permissions necessary for its current task, not broad standing access.
+- **Separate scanning/reading identities from admin identities** — an agent that reads untrusted content should never hold credentials capable of destructive or sensitive actions.
+- **Treat a flagged verdict as a signal to halt the action pipeline**, not just log a warning — if this scanner flags content an agent is about to act on, that action should stop, not merely be recorded.
+
+These principles reflect [PortSwigger's guidance on AI-powered scanner vulnerabilities](https://portswigger.net/web-security/llm-attacks/ai-powered-scanner-vulnerabilities), which explores how agents with real tool access can be manipulated via indirect prompt injection into performing unintended, destructive, or data-exfiltrating actions from a position of trust an external attacker couldn't otherwise reach.
 
 ## Running locally
 
