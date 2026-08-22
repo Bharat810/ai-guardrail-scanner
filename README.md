@@ -91,6 +91,8 @@ curl -X POST "https://your-deployed-api/v1/scan-prompt?user_input=hello" -H "x-a
 * Encoding detection currently covers Base64, hex, and URL-encoding. It does not yet cover more exotic obfuscation (e.g. Unicode homoglyphs, zero-width character insertion, ROT13) — a natural extension of the same pre-processing step.
 * LLM-layer classification shows measured inconsistency on ~15% of borderline inputs, particularly around directive-assertion phrasing and casual-toned system-prompt-extraction attempts.
 * API endpoints use a single shared demo key rather than per-user authentication — appropriate for a public portfolio demo, but would need real user-scoped API keys (and likely OAuth or similar) for multi-tenant production use
+* If both LLM providers are unavailable (outage, rate limit, invalid credentials), the API returns a clean `503` rather than crashing. If only one provider is unavailable, the scanner falls back to the working provider's verdict alone, with the response explicitly noting the degraded (non-consensus) state.
+
 ### Beyond detection: mitigating excessive agency risk
 
 This scanner detects text that resembles SQL/tool injection or OS command injection attempts (mapped to OWASP LLM06: Excessive Agency), but detection alone doesn't eliminate risk if flagged content still reaches an LLM agent with real tool access — for example, an AI-powered scanner or agent that can authenticate, crawl, and send real HTTP requests. Text-level detection is one layer of defense, not a substitute for constraining what an agent can actually do.
