@@ -102,6 +102,12 @@ Downstream systems integrating this scanner into an agentic pipeline should also
 
 These principles reflect [PortSwigger's guidance on AI-powered scanner vulnerabilities](https://portswigger.net/web-security/llm-attacks/ai-powered-scanner-vulnerabilities), which explores how agents with real tool access can be manipulated via indirect prompt injection into performing unintended, destructive, or data-exfiltrating actions from a position of trust an external attacker couldn't otherwise reach.
 
+### QR code scanning
+
+Upload a QR code image to extract and scan its visible text content — catches injection attempts encoded directly into QR data (a "quishing"-style vector). This reads only the standard, visible content any QR scanner would see; it does not detect steganographically hidden payloads within a QR code (a separate, harder, currently-unsolved problem — see NOTES.md).
+
+⚠️ **Caution:** avoid scanning QR codes that encode live credentials or authentication tokens (e.g. WhatsApp/Telegram device-linking QRs) with this or any similar tool — decoded content is sent to external LLM providers (Gemini/Groq) as part of classification, which is appropriate for URLs and payment references but not for live secrets.
+
 ## Running locally
 
 ```bash

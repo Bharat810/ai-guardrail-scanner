@@ -228,6 +228,27 @@ def decode_attempts(text: str) -> list[tuple[str, str]]:
             results.append((name, decoded))
     return results
 
+def scan_qr_from_image(image) -> str | None:
+    """Extracts visible/surface text from a QR code image. Returns None if no QR found."""
+    from pyzbar.pyzbar import decode as zbar_decode
+    results = zbar_decode(image)
+    if not results:
+        return None
+    return results[0].data.decode("utf-8")
+
+
+def full_check_image(image, content_source: str = "user_input") -> ThreatVerdict:
+    """Entry point for image input: extracts QR text (if any), then runs it
+    through the standard text pipeline. This only reads the QR's visible/
+    surface-level content — it does not attempt to recover steganographically
+    hidden payloads (see NOTES.md for why that's a separate, unsolved problem)."""
+    qr_text = scan_qr_from_image(image)
+    if qr_text is None:
+        return ThreatVerdict(is_threat=False, reason="No QR code detected in image.")
+    verdict = full_check(qr_text, content_source=content_source)
+    verdict.reason = f"QR code decoded to: '{qr_text}' — {verdict.reason}"
+    return verdict
+
 
 # --- Main pipeline ---
 
