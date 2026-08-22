@@ -22,12 +22,17 @@ def verify_api_key(x_api_key: str):
         raise HTTPException(status_code=401, detail="Invalid or missing API key. See README for the demo key.")
 
 
+from test_api import full_check, request_stats, ProviderUnavailableError
+
 @app.post("/v1/scan-prompt")
 @limiter.limit("10/minute")
 def scan_prompt(request: Request, user_input: str, x_api_key: str = Header(...)):
     verify_api_key(x_api_key)
-    return full_check(user_input)
-
+    try:
+        return full_check(user_input)
+    except ProviderUnavailableError as e:
+        print(f"Provider outage: {e}")
+        raise HTTPException(status_code=503, detail="Detection service temporarily unavailable. Please try again shortly.")
 
 @app.get("/v1/stats")
 @limiter.limit("30/minute")
