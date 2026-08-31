@@ -137,3 +137,11 @@ Previously, a Gemini or Groq API failure (timeout, rate limit, invalid response)
 - Both providers fail: raises `ProviderUnavailableError`, caught at the FastAPI layer and returned as a clean `503`, with full error detail logged server-side but a shorter message returned to the caller.
 
 **Verified:** forced both single-provider and dual-provider failure via invalid API keys (env var override in a throwaway test session, not touching real `.env`). Fallback-to-single-provider and full-outage exception paths both confirmed working as designed. Full benchmark re-run afterward showed unchanged 79.5% (31/39) accuracy — confirms this is a pure safety-net addition with no effect on normal-path classification behavior.
+
+## Input validation via Pydantic request model 
+
+Switched `/v1/scan-prompt` from a query parameter to a JSON request body (`ScanRequest` Pydantic model), enabling real validation: `user_input` is constrained to 1-5000 characters, `content_source` is constrained to the two valid values (`user_input` or `retrieved_content`) via regex pattern.
+
+**Verified:** a valid request returns `200` with correct classification; an oversized request (6000 chars) is rejected with a clean `422 Unprocessable Entity` and a structured error message, before ever reaching the LLM providers — protecting against unbounded API cost from arbitrarily large payloads.
+
+**Note:** this changes the API's calling convention (JSON body instead of query param) — a breaking change for any existing direct API caller, though the Streamlit dashboard is unaffected since it calls `full_check()` directly as a Python function, not through HTTP.

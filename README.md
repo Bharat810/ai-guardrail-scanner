@@ -82,7 +82,10 @@ For demo/testing purposes, use: `demo-key-guardrail-scanner-2026`
 
 Example:
 ```bash
-curl -X POST "https://your-deployed-api/v1/scan-prompt?user_input=hello" -H "x-api-key: demo-key-guardrail-scanner-2026"
+curl -X POST "https://your-deployed-api/v1/scan-prompt" \
+  -H "x-api-key: demo-key-guardrail-scanner-2026" \
+  -H "Content-Type: application/json" \
+  -d '{"user_input": "hello", "content_source": "user_input"}'
 ```
 ## Known limitations
 

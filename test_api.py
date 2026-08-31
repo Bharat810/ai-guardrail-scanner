@@ -7,14 +7,18 @@ import os
 
 from google import genai
 from groq import Groq
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+class ScanRequest(BaseModel):
+    user_input: str = Field(..., min_length=1, max_length=5000, description="Text to scan for prompt injection attempts")
+    content_source: str = Field(default="user_input", pattern="^(user_input|retrieved_content)$")
 
 class ProviderUnavailableError(Exception):
     """Raised when a provider API call fails (timeout, rate limit, error response)."""
@@ -333,3 +337,4 @@ def full_check(text: str, depth: int = 0, content_source: str = "user_input") ->
         return check_prompt(text, content_source=content_source)
 
     return ThreatVerdict(is_threat=False, reason="No known attack pattern found")
+
