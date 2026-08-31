@@ -145,3 +145,7 @@ Switched `/v1/scan-prompt` from a query parameter to a JSON request body (`ScanR
 **Verified:** a valid request returns `200` with correct classification; an oversized request (6000 chars) is rejected with a clean `422 Unprocessable Entity` and a structured error message, before ever reaching the LLM providers — protecting against unbounded API cost from arbitrarily large payloads.
 
 **Note:** this changes the API's calling convention (JSON body instead of query param) — a breaking change for any existing direct API caller, though the Streamlit dashboard is unaffected since it calls `full_check()` directly as a Python function, not through HTTP.
+
+## Benchmark formalization 
+
+Added 3 previously-informal spot-check cases (authority impersonation: plain, Base64-encoded, and minimal variants) as permanent benchmark tests — all pass. Total set now 42 cases, 81.0% accuracy, same 8 known hard/boundary cases as prior runs; no regressions from adding these.

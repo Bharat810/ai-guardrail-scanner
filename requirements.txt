@@ -61,3 +61,4 @@ slowapi
 pyzbar
 pillow
 qrcode
+pydantic
