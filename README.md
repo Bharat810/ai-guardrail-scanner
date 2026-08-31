@@ -114,6 +114,15 @@ Upload a QR code image to extract and scan its visible text content — catches 
 
 ⚠️ **Caution:** avoid scanning QR codes that encode live credentials or authentication tokens (e.g. WhatsApp/Telegram device-linking QRs) with this or any similar tool — decoded content is sent to external LLM providers (Gemini/Groq) as part of classification, which is appropriate for URLs and payment references but not for live secrets.
 
+### Docker
+
+A `Dockerfile` is included for containerized deployment of the FastAPI backend (not the Streamlit demo, which is deployed separately via Streamlit Cloud). It has been carefully reviewed but not build-tested locally, due to a virtualization/environment limitation on the development machine — the same `libzbar0` system dependency it installs has been verified working in the equivalent Streamlit Cloud deployment.
+
+```bash
+docker build -t ai-guardrail-scanner .
+docker run -p 8000:8000 --env-file .env ai-guardrail-scanner
+```
+
 ## Running locally
 
 ```bash
