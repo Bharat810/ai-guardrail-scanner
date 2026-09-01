@@ -3,13 +3,22 @@ import sys
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, status
-from pydantic import BaseModel
 
-# Add project root directory to Python path for direct execution
+# 1. Add project root directory to sys.path first so test_api can be found
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from test_api import full_check, full_check_image, request_stats, ThreatVerdict, ScanRequest
-from app.slm_engine import load_tier2_model
+# 2. Import pipeline elements directly from test_api.py
+from test_api import (
+    full_check, 
+    check_prompt, 
+    request_stats, 
+    ThreatVerdict, 
+    ScanRequest, 
+    get_tier2_model
+)
+
+# Suppress noisy logs
+os.environ["STREAMLIT_LOG_LEVEL"] = "error"
 
 # Initialize logger
 logger = logging.getLogger("uvicorn")
@@ -20,7 +29,7 @@ CLOUD_ONLY_MODE = os.getenv("CLOUD_ONLY_MODE", "false").lower() == "true"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Pre-load Tier 2 DeBERTa model and tokenizer into memory if not in Cloud-Only mode
+    # Startup logic
     print("🚀 Initializing Guardrail Gateway...")
     
     if CLOUD_ONLY_MODE:
@@ -29,18 +38,19 @@ async def lifespan(app: FastAPI):
     else:
         print("⏳ Pre-loading Tier 2 Local SLM model...")
         try:
-            load_tier2_model()
+            get_tier2_model()
             print("✅ Tier 2 SLM loaded successfully. Gateway ready.")
         except Exception as e:
             logger.warning(f"⚠️ Could not load Tier 2 SLM model: {e}. Falling back to Cloud-Only execution.")
             print("⚠️ SLM load failed. Gateway proceeding without Tier 2 local model.")
 
-    yield  # Server runs and handles requests here
+    yield  # Application handles requests here
     
     # Shutdown logic
     print("🛑 Shutting down Guardrail Gateway...")
 
 
+# 3. Instantiate app object before defining any @app routes
 app = FastAPI(
     title="3-Tier LLM Security Guardrail Gateway",
     description="Multi-tier detection system using Tier 1 (Regex/Decoding), Tier 2 (Local DeBERTa SLM), and Tier 3 (Cloud LLM Consensus).",
@@ -59,51 +69,54 @@ async def health_check():
     }
 
 
-@app.post("/v1/scan")
+@app.post("/v1/scan", response_model=ThreatVerdict)
 async def scan_prompt(request: ScanRequest):
-    """
-    Scans a prompt or retrieved content for injection / jailbreak attempts across:
-    - Tier 1: Pattern matching & recursive decoding
-    - Tier 2: Local SLM inference (short-circuits high-confidence safe/threats)
-    - Tier 3: Cloud LLM consensus for borderline cases (Gemini + Groq)
-    """
     try:
         verdict = full_check(request.user_input, content_source=request.content_source)
         return verdict
     except Exception as e:
         logger.error(f"❌ Guardrail processing exception on input '{request.user_input[:30]}...': {e}")
         
-        # Safe fallback response to prevent 500 server crashes
-        return {
-            "is_threat": False,
-            "reason": f"Input processed safely after scanner evaluation error: {str(e)}",
-            "owasp": "A03:2021-Injection",
-            "provider_breakdown": {"System Error": False}
-        }
+        return ThreatVerdict(
+            is_threat=True,
+            reason=f"System Security Fallback: Scanner evaluation encountered an unhandled error ({str(e)}). Payload blocked for safety.",
+            owasp="LLM10: Unchecked System Failures",
+            provider_breakdown={"Global_FailSecure_Fallback": True}
+        )
+
+
+@app.post("/v1/debug-tier3", response_model=ThreatVerdict)
+async def debug_tier3(request: ScanRequest):
+    """Directly triggers Tier 3 Gemini & Groq Consensus evaluation."""
+    return check_prompt(request.user_input)
 
 
 @app.get("/v1/stats")
 async def get_stats():
-    """
-    Returns real-time processing statistics across all detection tiers.
-    """
+    """Returns real-time processing statistics across all detection tiers."""
     total_scans = sum(request_stats.values())
+    
+    regex_scans = request_stats.get("tier1_regex", 0)
+    decode_scans = request_stats.get("tier1_decoding", 0)
+    slm_scans = request_stats.get("tier2_slm_local", 0)
+    llm_scans = request_stats.get("tier3_llm_consensus", 0)
+    
+    local_filtered = regex_scans + decode_scans + slm_scans
+    
     return {
         "total_requests_processed": total_scans,
         "tier_breakdown": {
-            "tier1_regex": request_stats["regex_only"],
-            "tier1_decoding": request_stats["encoding_decoded"],
-            "tier2_slm_local": request_stats["slm_tier2"],
-            "tier3_llm_consensus": request_stats["llm_consensus"]
+            "tier1_regex": regex_scans,
+            "tier1_decoding": decode_scans,
+            "tier2_slm_local": slm_scans,
+            "tier3_llm_consensus": llm_scans
         },
         "efficiency_metrics": {
             "local_filtered_percentage": (
-                f"{((request_stats['regex_only'] + request_stats['encoding_decoded'] + request_stats['slm_tier2']) / total_scans * 100):.2f}%"
-                if total_scans > 0 else "0.00%"
+                f"{(local_filtered / total_scans * 100):.2f}%" if total_scans > 0 else "0.00%"
             ),
             "cloud_escalation_percentage": (
-                f"{(request_stats['llm_consensus'] / total_scans * 100):.2f}%"
-                if total_scans > 0 else "0.00%"
+                f"{(llm_scans / total_scans * 100):.2f}%" if total_scans > 0 else "0.00%"
             )
         }
     }
