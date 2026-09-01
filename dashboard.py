@@ -3,7 +3,7 @@ import requests
 from PIL import Image
 import os
 
-# Use environment variable or default to local for development
+# Use Streamlit Cloud Secrets or default to local development
 API_URL = st.secrets.get("API_URL", "http://127.0.0.1:8000")
 
 st.set_page_config(
@@ -30,7 +30,7 @@ try:
         col4.metric("Tier 3: Cloud LLM", breakdown.get("tier3_llm_consensus", 0), help="Evaluated by Gemini/Groq")
         st.divider()
 except Exception:
-    st.warning("⚠️ Could not connect to FastAPI server at http://127.0.0.1:8000. Ensure Uvicorn is running.")
+    st.warning(f"⚠️ Could not connect to FastAPI server at {API_URL}. Ensure the backend is running.")
 
 mode = st.radio(
     "Select Input Mode:",
@@ -69,7 +69,6 @@ if mode == "Direct user input":
                             for provider, flagged in result["provider_breakdown"].items():
                                 label = "🔴 Threat" if flagged else "🟢 Safe"
                                 st.write(f"**{provider}**: {label}")
-                    st.rerun()
                 else:
                     st.error(f"Error from API: {res.status_code}")
             except Exception as e:
@@ -100,7 +99,6 @@ elif mode == "Simulated retrieved content":
                             for provider, flagged in result["provider_breakdown"].items():
                                 label = "🔴 Threat" if flagged else "🟢 Safe"
                                 st.write(f"**{provider}**: {label}")
-                    st.rerun()
                 else:
                     st.error(f"Error from API: {res.status_code}")
             except Exception as e:
@@ -136,7 +134,6 @@ elif mode == "Image / QR Code Upload":
                             for provider, flagged in result["provider_breakdown"].items():
                                 label = "🔴 Threat" if flagged else "🟢 Safe"
                                 st.write(f"**{provider}**: {label}")
-                    st.rerun()
                 else:
                     st.error(f"Error from API ({res.status_code}): {res.text}")
             except Exception as e:
