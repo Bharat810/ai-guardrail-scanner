@@ -1,3 +1,5 @@
+import os
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
@@ -5,18 +7,33 @@ from pydantic import BaseModel, Field
 from test_api import full_check, full_check_image, request_stats, ThreatVerdict, ScanRequest
 from app.slm_engine import load_tier2_model
 
+# Initialize logger
+logger = logging.getLogger("uvicorn")
+
+# Check if Cloud-Only mode is explicitly enabled
+CLOUD_ONLY_MODE = os.getenv("CLOUD_ONLY_MODE", "false").lower() == "true"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Pre-load Tier 2 DeBERTa model and tokenizer into memory
+    # Startup: Pre-load Tier 2 DeBERTa model and tokenizer into memory if not in Cloud-Only mode
     print("🚀 Initializing Guardrail Gateway...")
-    print("⏳ Pre-loading Tier 2 Local SLM model...")
-    load_tier2_model()
-    print("✅ Tier 2 SLM loaded successfully. Gateway ready.")
     
+    if CLOUD_ONLY_MODE:
+        logger.info("⚡ Running in CLOUD-ONLY Mode: Bypassing local DeBERTa SLM pre-loading.")
+        print("⚡ Cloud-Only mode active. Tier 2 DeBERTa SLM bypassed.")
+    else:
+        print("⏳ Pre-loading Tier 2 Local SLM model...")
+        try:
+            load_tier2_model()
+            print("✅ Tier 2 SLM loaded successfully. Gateway ready.")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not load Tier 2 SLM model: {e}. Falling back to Cloud-Only execution.")
+            print("⚠️ SLM load failed. Gateway proceeding without Tier 2 local model.")
+
     yield  # Server runs and handles requests here
     
-    # Shutdown logic (if needed)
+    # Shutdown logic
     print("🛑 Shutting down Guardrail Gateway...")
 
 
@@ -31,7 +48,11 @@ app = FastAPI(
 @app.get("/health", status_code=status.HTTP_200_OK)
 async def health_check():
     """Health check endpoint for container orchestration & load balancers."""
-    return {"status": "healthy", "service": "llm-guardrail-gateway"}
+    return {
+        "status": "healthy",
+        "service": "llm-guardrail-gateway",
+        "cloud_only_mode": CLOUD_ONLY_MODE
+    }
 
 
 @app.post("/v1/scan", response_model=ThreatVerdict)
