@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .env
 test_qr_*.png
+guardrail_lora_adapter/
+guardrail_lora_adapter.zip
