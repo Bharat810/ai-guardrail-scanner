@@ -1,46 +1,95 @@
-from fastapi import FastAPI, Header, HTTPException, Request
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-import os
-from dotenv import load_dotenv
+import io
+import time
+from typing import Dict, Any, Optional
+from fastapi import FastAPI, HTTPException, File, UploadFile
+from pydantic import BaseModel, Field
+from PIL import Image
 
-from test_api import full_check, request_stats, ProviderUnavailableError, ScanRequest
+# Import detection logic from test_api
+from test_api import full_check, full_check_image, request_stats
 
-load_dotenv()
+app = FastAPI(
+    title="AI Security Guardrail Gateway",
+    description="3-Tier Security Gateway protecting LLMs against Direct & Indirect Prompt Injection attacks.",
+    version="1.0.0"
+)
 
-DEMO_API_KEY = os.getenv("DEMO_API_KEY")
+class ScanRequest(BaseModel):
+    user_input: str = Field(..., description="The prompt or retrieved content string to evaluate.")
+    content_source: str = Field(default="user_input", description="Source of content: 'user_input' or 'retrieved_content'")
 
-limiter = Limiter(key_func=get_remote_address)
-app = FastAPI()
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+class ScanResponse(BaseModel):
+    is_threat: bool
+    reason: str
+    owasp: Optional[str] = None
+    provider_breakdown: Optional[Dict[str, bool]] = None
+    extracted_text: Optional[str] = None
 
+@app.get("/")
+def read_root():
+    return {
+        "status": "online",
+        "service": "AI Security Guardrail Gateway",
+        "version": "1.0.0",
+        "docs": "/docs"
+    }
 
-def verify_api_key(x_api_key: str):
-    if x_api_key != DEMO_API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key. See README for the demo key.")
-
-
-@app.post("/v1/scan-prompt")
-@limiter.limit("10/minute")
-def scan_prompt(request: Request, payload: ScanRequest, x_api_key: str = Header(...)):
-    verify_api_key(x_api_key)
-    try:
-        return full_check(payload.user_input, content_source=payload.content_source)
-    except ProviderUnavailableError as e:
-        print(f"Provider outage: {e}")
-        raise HTTPException(status_code=503, detail="Detection service temporarily unavailable. Please try again shortly.")
-
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "timestamp": time.time()}
 
 @app.get("/v1/stats")
-@limiter.limit("30/minute")
-def get_stats(request: Request, x_api_key: str = Header(...)):
-    verify_api_key(x_api_key)
-    total = sum(request_stats.values())
+def get_stats():
     return {
-        "counts": request_stats,
-        "total": total,
-        "regex_only_pct": round(request_stats["regex_only"] / total * 100, 1) if total else 0,
-        "llm_consensus_pct": round(request_stats["llm_consensus"] / total * 100, 1) if total else 0,
+        "total_requests": sum(request_stats.values()),
+        "tier_breakdown": {
+            "tier1_regex": request_stats.get("tier1_regex", 0),
+            "tier1_decoding": request_stats.get("tier1_decoding", 0),
+            "tier2_slm_local": request_stats.get("tier2_slm_local", 0),
+            "tier3_llm_consensus": request_stats.get("tier3_llm_consensus", 0)
+        }
     }
+
+@app.post("/v1/scan", response_model=ScanResponse)
+def scan_prompt(request: ScanRequest):
+    if not request.user_input.strip():
+        raise HTTPException(status_code=400, detail="Text input cannot be empty.")
+    
+    result = full_check(
+        user_input=request.user_input,
+        content_source=request.content_source
+    )
+    
+    return ScanResponse(
+        is_threat=result.is_threat,
+        reason=result.reason,
+        owasp=result.owasp,
+        provider_breakdown=result.provider_breakdown
+    )
+
+@app.post("/v1/scan-image", response_model=ScanResponse)
+async def scan_image(file: UploadFile = File(...)):
+    """
+    Scans an uploaded image/QR code for embedded multimodal prompt injections.
+    """
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
+    
+    try:
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
+
+    # Run existing image detection pipeline
+    result = full_check_image(image)
+    
+    extracted_txt = getattr(result, "extracted_text", None) or getattr(result, "decoded_text", None)
+    
+    return ScanResponse(
+        is_threat=result.is_threat,
+        reason=result.reason,
+        owasp=result.owasp,
+        provider_breakdown=getattr(result, "provider_breakdown", None),
+        extracted_text=extracted_txt
+    )

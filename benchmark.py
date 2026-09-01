@@ -2,7 +2,9 @@ import json
 import time
 import requests
 
-BASE_URL = "http://127.0.0.1:8000"
+import os
+
+BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
 # --- BENCHMARK DATASET ---
 # Contains standard prompts, obvious Tier 1 attacks, and subtle Tier 2 targeted attacks.

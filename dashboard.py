@@ -2,11 +2,17 @@ import streamlit as st
 import requests
 from PIL import Image
 
-API_URL = "http://127.0.0.1:8000"
+# Use environment variable or default to local for development
+API_URL = st.secrets.get("API_URL", "http://127.0.0.1:8000")
 
-st.set_page_config(page_title="AI Guardrail Gateway", layout="wide")
+st.set_page_config(
+    page_title="AI Guardrail Gateway Dashboard",
+    page_icon="🛡️",
+    layout="wide"
+)
+
 st.title("🛡️ AI Security Guardrail Scanner")
-st.write("Enter a prompt below to evaluate threats across local and cloud detection tiers.")
+st.write("Evaluate prompt injection, jailbreaks, and indirect visual/QR attacks across local and cloud detection tiers.")
 
 # --- FETCH LIVE STATS FROM FASTAPI ---
 try:
@@ -23,12 +29,12 @@ try:
         col4.metric("Tier 3: Cloud LLM", breakdown.get("tier3_llm_consensus", 0), help="Evaluated by Gemini/Groq")
         st.divider()
 except Exception:
-    st.warning("⚠️ Could not connect to FastAPI server at http://127.0.0.1:8000. Ensure uvicorn is running.")
+    st.warning("⚠️ Could not connect to FastAPI server at http://127.0.0.1:8000. Ensure Uvicorn is running.")
 
 mode = st.radio(
-    "What are you scanning?",
-    ["Direct user input", "Simulated retrieved content (webpage/document/tool output)"],
-    help="Retrieved content and direct user inputs are handled with different prompt-isolation logic."
+    "Select Input Mode:",
+    ["Direct user input", "Simulated retrieved content", "Image / QR Code Upload"],
+    help="Select direct text input, retrieved document/web text, or visual QR code scanning."
 )
 
 SIMULATED_PAGES = {
@@ -42,10 +48,10 @@ SIMULATED_PAGES = {
 # --- SCANNING LOGIC VIA HTTP REQUESTS ---
 if mode == "Direct user input":
     content_source = "user_input"
-    user_input = st.text_area("Prompt to check:")
+    user_input = st.text_area("Prompt to check:", height=120)
     
-    if st.button("Scan Prompt"):
-        if user_input:
+    if st.button("Scan Prompt", type="primary"):
+        if user_input.strip():
             payload = {"user_input": user_input, "content_source": content_source}
             try:
                 res = requests.post(f"{API_URL}/v1/scan", json=payload, timeout=30)
@@ -68,15 +74,15 @@ if mode == "Direct user input":
             except Exception as e:
                 st.error(f"Failed to connect to scanner API: {e}")
         else:
-            st.warning("Please enter some text to scan.")
+            st.warning("Please enter text to scan.")
 
-elif mode == "Simulated retrieved content (webpage/document/tool output)":
+elif mode == "Simulated retrieved content":
     content_source = "retrieved_content"
     choice = st.selectbox("Choose a simulated retrieved-content example:", list(SIMULATED_PAGES.keys()))
-    user_input = st.text_area("Simulated retrieved content:", value=SIMULATED_PAGES[choice], height=100)
+    user_input = st.text_area("Simulated retrieved content:", value=SIMULATED_PAGES[choice], height=120)
 
-    if st.button("Scan Content"):
-        if user_input:
+    if st.button("Scan Content", type="primary"):
+        if user_input.strip():
             payload = {"user_input": user_input, "content_source": content_source}
             try:
                 res = requests.post(f"{API_URL}/v1/scan", json=payload, timeout=30)
@@ -99,4 +105,38 @@ elif mode == "Simulated retrieved content (webpage/document/tool output)":
             except Exception as e:
                 st.error(f"Failed to connect to scanner API: {e}")
         else:
-            st.warning("Please enter some text to scan.")
+            st.warning("Please select or enter content to scan.")
+
+elif mode == "Image / QR Code Upload":
+    st.markdown("### 📷 Scan Visual / QR Code Prompt Injection")
+    uploaded_file = st.file_uploader("Upload an image or QR code (PNG, JPG, JPEG):", type=["png", "jpg", "jpeg"])
+    
+    if uploaded_file is not None:
+        st.image(uploaded_file, caption="Uploaded Image Preview", width=300)
+        
+        if st.button("Scan Image for Injections", type="primary"):
+            files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
+            try:
+                res = requests.post(f"{API_URL}/v1/scan-image", files=files, timeout=35)
+                if res.status_code == 200:
+                    result = res.json()
+                    
+                    if result.get("extracted_text"):
+                        st.info(f"🔍 **Extracted QR Payload**: `{result['extracted_text']}`")
+                    
+                    if result["is_threat"]:
+                        owasp_line = f" ({result['owasp']})" if result.get("owasp") else ""
+                        st.error(f"⚠️ THREAT DETECTED: {result['reason']}{owasp_line}")
+                    else:
+                        st.success(f"✅ Safe: {result['reason']}")
+
+                    if result.get("provider_breakdown"):
+                        with st.expander("Provider / Tier Breakdown"):
+                            for provider, flagged in result["provider_breakdown"].items():
+                                label = "🔴 Threat" if flagged else "🟢 Safe"
+                                st.write(f"**{provider}**: {label}")
+                    st.rerun()
+                else:
+                    st.error(f"Error from API ({res.status_code}): {res.text}")
+            except Exception as e:
+                st.error(f"Failed to connect to scanner API: {e}")
