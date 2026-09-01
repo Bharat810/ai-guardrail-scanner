@@ -7,3 +7,4 @@ google-genai
 groq
 slowapi
 python-multipart
+libzbar0
