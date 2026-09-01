@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 from PIL import Image
+import os
 
 # Use environment variable or default to local for development
 API_URL = st.secrets.get("API_URL", "http://127.0.0.1:8000")
