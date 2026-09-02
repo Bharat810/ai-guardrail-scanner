@@ -18,6 +18,25 @@ Three-layer cascade, in order — cheap and deterministic first, expensive and f
 
 This ordering matters: fast, deterministic checks run first; the more expensive/flexible checks only run when needed — the same design principle real security tools use (fail fast on known bad, escalate to deeper analysis for the unknown).
 
+## Architecture diagram
+
+```mermaid
+flowchart TD
+    A[Input prompt] --> B[Tier 1: regex match + base64/URL decode]
+    B -->|match| BLOCKED[Blocked — is_threat = true]
+    B -->|no match| C[Tier 2: local LoRA SLM confidence score]
+    C -->|confidence >= 0.80| BLOCKED
+    C -->|confidence < 0.08| SAFE[Safe — request passes]
+    C -->|0.08-0.80 ambiguous| D[Tier 3: Gemini + Groq consensus, fail-closed]
+    D -->|both agree safe| SAFE
+    D -->|disagree or flagged threat| BLOCKED
+
+    style BLOCKED fill:#F09595,stroke:#791F1F
+    style SAFE fill:#97C459,stroke:#27500A
+```
+
+**Known gap:** the `confidence < 0.08` path returns immediately as safe without a Tier 3 check — a confidently-wrong Tier 2 verdict currently has no safety net (see Known limitations below).
+
 ## Detected attack categories
 
 Built from hands-on exploitation of real vulnerable applications (PortSwigger Web LLM Attacks labs), not synthetic examples:
