@@ -1,0 +1,11 @@
+# Install for local development, on top of requirements.txt:
+#   pip install -r requirements.txt -r requirements-local.txt
+#
+# Do NOT add these to requirements.txt if deploying on Render's free tier —
+# torch + transformers are large and will likely blow the build/memory limits.
+# On Render, run with CLOUD_ONLY_MODE=true instead; the app already has a
+# built-in bypass for this (see main.py lifespan / slm_engine.py).
+
+torch
+transformers
+peft

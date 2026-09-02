@@ -1,9 +1,11 @@
 from typing import Optional, Dict
 from pydantic import BaseModel, Field
 
+
 class ProviderUnavailableError(Exception):
     """Raised when an external LLM provider API is unreachable or failing."""
     pass
+
 
 class ScanRequest(BaseModel):
     user_input: str = Field(..., alias="prompt", description="The prompt text to analyze for security threats")
@@ -11,6 +13,7 @@ class ScanRequest(BaseModel):
 
     class Config:
         populate_by_name = True
+
 
 class ThreatVerdict(BaseModel):
     is_threat: bool

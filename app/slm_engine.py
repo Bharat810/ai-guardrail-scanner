@@ -21,7 +21,8 @@ def load_tier2_model():
 
         tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_ID)
         base_model = AutoModelForSequenceClassification.from_pretrained(
-            BASE_MODEL_ID, num_labels=2
+            BASE_MODEL_ID,
+            num_labels=2
         )
 
         if os.path.exists(ADAPTER_PATH):
@@ -58,7 +59,6 @@ def analyze_prompt_tier2(prompt: str) -> dict:
 
     try:
         import torch
-
         inputs = tokenizer(
             prompt,
             return_tensors="pt",
@@ -69,9 +69,9 @@ def analyze_prompt_tier2(prompt: str) -> dict:
 
         with torch.no_grad():
             outputs = model(**inputs)
-            probs = torch.softmax(outputs.logits, dim=-1)[0]
-            jailbreak_prob = probs[1].item()
 
+        probs = torch.softmax(outputs.logits, dim=-1)[0]
+        jailbreak_prob = probs[1].item()
         is_jailbreak = jailbreak_prob > 0.5
 
         return {
@@ -80,7 +80,6 @@ def analyze_prompt_tier2(prompt: str) -> dict:
             "flagged_by": "Tier2_SLM",
             "bypassed": False
         }
-
     except Exception as e:
         print(f"Error during Tier 2 analysis: {e}")
         return {
