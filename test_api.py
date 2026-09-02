@@ -147,7 +147,7 @@ def check_prompt_gemini(prompt: str) -> ThreatVerdict:
     if not api_key:
         raise ProviderUnavailableError("GEMINI_API_KEY is missing from environment variables")
  
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
  
     payload = {
