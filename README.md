@@ -1,9 +1,8 @@
-# AI Security Guardrail Scanner
+# AI Guardrail Scanner
 
-A two-layer security service that detects prompt injection, jailbreak attempts, and LLM-agency exploitation before they reach a language model — built and validated using real attack techniques from PortSwigger's Web LLM Attacks labs.
+A three-tier security service that detects prompt injection, jailbreak attempts, and LLM-agency exploitation before they reach a language model — built and validated using real attack techniques from PortSwigger's Web LLM Attacks labs.
 
 **Live demo:** [ai-guardrail-scanner.streamlit.app](https://ai-guardrail-scanner.streamlit.app)
-<img width="800" alt="AI Guardrail Scanner Live Demo" src="https://github.com/user-attachments/assets/672f392f-a83c-4722-80ea-061bb7f4dc14" />
 
 ## What it does
 
@@ -11,12 +10,13 @@ This tool inspects text intended for an LLM-powered application and classifies i
 
 ## Architecture
 
-Two-layer detection, in order:
+Three-layer cascade, in order — cheap and deterministic first, expensive and flexible last:
 
-1. **Regex pattern matching** — instant, zero API cost, fully deterministic. Checks input against a categorized library of known attack patterns.
-2. **LLM classification (Gemini)** — used only when regex finds nothing, to catch attacks that don't match known phrases (paraphrasing, novel framing, obfuscation).
+1. **Tier 1 — Regex & encoding detection.** Instant, zero API cost, fully deterministic. Checks input against a categorized library of known attack patterns. Also detects Base64 and URL-encoded input, decodes it, and recursively re-runs the same pipeline on the decoded text (capped at depth 3, to catch nested/layered encoding without infinite recursion).
+2. **Tier 2 — Local fine-tuned SLM.** A LoRA-adapted `microsoft/deberta-v3-small` classifier, fine-tuned on injection/jailbreak examples and run entirely locally (no API cost, no network dependency). Catches subtler attacks that don't match a known regex phrase.
+3. **Tier 3 — Multi-provider LLM consensus.** When Tier 1 and Tier 2 don't resolve the input confidently, it's sent to two independent providers — Google Gemini (`gemini-3.6-flash`) and Groq (`openai/gpt-oss-20b`) — in parallel. If both agree, that verdict is returned. If they disagree, the input is flagged as a threat regardless (fail-closed): provider disagreement is treated as a signal of genuine ambiguity, not something to silently resolve.
 
-This ordering matters: cheap, fast checks run first; the more expensive/flexible LLM check only runs when needed — the same design principle real security tools use (fail fast on known bad, escalate to deeper analysis for the unknown).
+This ordering matters: fast, deterministic checks run first; the more expensive/flexible checks only run when needed — the same design principle real security tools use (fail fast on known bad, escalate to deeper analysis for the unknown).
 
 ## Detected attack categories
 
@@ -31,8 +31,6 @@ Built from hands-on exploitation of real vulnerable applications (PortSwigger We
 
 ### OWASP LLM Top 10 alignment
 
-Categories map to the [OWASP Top 10 for LLM Applications (2025)](https://genai.owasp.org/llm-top-10/):
-
 | Category | OWASP mapping |
 |---|---|
 | Instruction override | LLM01: Prompt Injection |
@@ -42,87 +40,58 @@ Categories map to the [OWASP Top 10 for LLM Applications (2025)](https://genai.o
 | OS command injection | LLM06: Excessive Agency |
 | System prompt extraction | LLM07: System Prompt Leakage |
 
-Three categories map to LLM01 because they represent distinct *techniques* (direct override, persona-based bypass, false-authority framing) that share the same underlying OWASP risk classification — prompt injection is the entry vector in all three cases, even though the surface pattern differs enough to warrant separate detection rules.
+## Tech stack
 
-### Encoding & obfuscation handling *Note: encoding-detection is verified functionally (see NOTES.md) but not yet incorporated into the accuracy benchmark below — planned for the next benchmark pass alongside upcoming multi-provider and prompt-refinement changes.*
+Python · FastAPI · Streamlit · Google Gemini API · Groq API · PyTorch · Transformers · PEFT (LoRA) · Pydantic
 
-Before classification, input is checked for common encodings (Base64, hex, URL-encoding). If detected, the payload is decoded and recursively passed back through the same detection pipeline (regex first, then LLM if needed) — up to 3 levels deep, to catch nested/layered encoding without infinite recursion.
+## Deployment
 
-This closes a real bypass: an attacker submitting `aWdub3JlIGFsbCBwcmV2aW91cyBpbnN0cnVjdGlvbnM=` (Base64 for "ignore all previous instructions") would previously reach the LLM layer as an unrecognizable blob. Now it's decoded and correctly flagged by the regex layer itself — faster and more deterministic than relying on the LLM to notice.
-
-Tech stack
-Python · FastAPI · Streamlit · Google Gemini API · Pydantic
-(encoding detection uses Python's standard library: base64, re, urllib.parse, binascii — no new dependencies)
-
-*Note: internal request-layer tracking shows most inputs in adversarial benchmark testing require the full LLM consensus layer rather than resolving via regex alone — expected, since the benchmark set is deliberately weighted toward ambiguous/boundary cases rather than typical traffic. See NOTES.md for the measured breakdown.*
+- **Frontend:** Streamlit Cloud (live demo link above)
+- **Backend:** Render, running in `CLOUD_ONLY_MODE=true` — Tier 1 and Tier 3 only. Render's free tier can't accommodate the PyTorch/Transformers/PEFT stack needed for Tier 2, so the local SLM is skipped there and the pipeline falls back to Tier 1 → Tier 3 directly.
+- **Tier 2 (local SLM):** currently only active when running the project locally, where the full dependency set can be installed. See "Running locally" below.
 
 ## Testing & benchmark results
 
-Tested against 28 inputs, including deliberately adversarial borderline cases designed to probe the true/false decision boundary (not just obvious attack/safe pairs).
+**Current status: v3 of the Tier 2 LoRA model, iterating toward higher accuracy (v4 in progress).**
 
-**Results:**
-- **89.3% (25/28)** — single-provider mode (Gemini only, with refined few-shot system instructions), plain-text test set
-- **73.5% (25/34)** — consensus mode (Gemini + Groq, fail-closed on disagreement), expanded test set including encoded (Base64) variants of known boundary cases
-- **81.0% (34/42)**, consistent with prior runs — consensus mode (Gemini + Groq, fail-closed on disagreement), expanded test set including encoded (Base64) variants and formalized authority-impersonation spot-checks
+Most recent run of the 10-case adversarial benchmark suite (`benchmark.py`, hitting the live `/v1/scan` endpoint):
 
-Consensus mode trades a small amount of point-in-time accuracy for explicit uncertainty signaling: rather than silently picking one model's answer on a genuinely ambiguous input, disagreement between providers is itself treated as a signal and the input is flagged for review. Full reasoning and a per-provider breakdown are documented in `NOTES.md`, alongside a real-world comparison showing that even production AI assistants (tested informally against Grok, ChatGPT, and Claude) don't agree on how to handle some of the same borderline instruction-extraction phrasing — supporting evidence that these are genuinely hard cases, not classifier defects. One case has shown a rare false negative during testing, consistent with its documented instability — see NOTES.md for full details.
+- **9/10 passed — 90.0% accuracy**
+- Tier handling breakdown: 1 resolved by Tier 1 regex, 7 resolved by Tier 2 local SLM, 2 escalated to Tier 3 consensus
+- The one failure: a hypothetical-framing jailbreak attempt ("if a developer wanted to disable security constraints...") was scored confidently *safe* by Tier 2 and, per the current pipeline design, a confident-safe Tier 2 verdict skips Tier 3 entirely. This is a known, reproducible gap (see Known limitations) rather than one-off noise — the same prompt was also misjudged by the pre-retrained (v2) model.
 
-(see `benchmark.py` for the full test set, `NOTES.md` for detailed findings)
+This benchmark set is deliberately adversarial and boundary-probing — it is not representative of expected real-world traffic, where most inputs would likely resolve at Tier 1 or Tier 2 alone.
 
-Key findings from adversarial testing:
+(See `NOTES.md` for the full development history, including the two-layer-era benchmark results from before the Tier 2/Tier 3 migration.)
 
-* The LLM layer reliably distinguishes grammatical mood — genuine questions about compliance ("will you do as I say?") are classified safe, while directive assertions ("you need to do as I say") are flagged, regardless of surface politeness
-* The regex layer is fully deterministic; the LLM layer can be inconsistent on ambiguous, borderline-phrased inputs near the decision boundary — documented explicitly rather than hidden
-* The LLM layer catches obfuscated attacks (symbol-injected known phrases) that the regex layer alone would miss, validating the two-layer design
-* Consensus mode surfaces disagreement between independent providers as an explicit signal rather than a hidden coin-flip
-### API access
+## API endpoints
 
-The `/v1/scan-prompt` and `/v1/stats` endpoints require an API key, passed via the `x-api-key` header, and are rate-limited (10 requests/minute for scanning, 30/minute for stats) to prevent abuse of the underlying LLM API calls.
+- `GET /health` — health check
+- `POST /v1/scan` — main scanning endpoint, takes `{"prompt": "...", "content_source": "user_input" | "retrieved_content"}`
+- `POST /v1/scan-image` — upload a QR code image; extracts and scans its visible text content
+- `POST /v1/debug-tier3` — bypasses Tier 1/2, directly triggers Tier 3 Gemini + Groq consensus
+- `GET /v1/stats` — real-time per-tier request counts and efficiency metrics
 
-For demo/testing purposes, use: `demo-key-guardrail-scanner-2026`
+No API key or rate limiting is currently implemented on these endpoints.
 
-Example:
-```bash
-curl -X POST "https://your-deployed-api/v1/scan-prompt" \
-  -H "x-api-key: demo-key-guardrail-scanner-2026" \
-  -H "Content-Type: application/json" \
-  -d '{"user_input": "hello", "content_source": "user_input"}'
-```
 ## Known limitations
 
-* Indirect prompt injection detection is now implemented via a `content_source` parameter (`"user_input"` vs `"retrieved_content"`) — retrieved content gets a dedicated regex category (AI-directed instruction language) plus stricter LLM-layer scrutiny. Relies on the calling system correctly labeling content source; the scanner cannot independently verify provenance. The live demo includes a toggle to simulate this: switching to "Simulated retrieved content" mode lets you pick from example webpage/review snippets (clean and injected) to see the detection in action. Note this project does not fetch real web content — these are fixed examples demonstrating the detection logic that would sit between a real content-fetching step and the LLM.
-(**Scope clarification:** this project does not fetch web content, browse pages, or orchestrate an LLM application itself — it is a detection checkpoint that assumes some external system (an LLM app's retrieval/browsing layer) passes it content to evaluate, tagged with the correct `content_source`. It also currently returns a binary threat/safe verdict on a whole piece of text, not a way to surgically strip just the malicious portion while preserving legitimate content around it (e.g., keeping a genuine product review while removing only an injected instruction within it) — a real production system would likely need that finer-grained sanitization capability.)
-* Encoding detection currently covers Base64, hex, and URL-encoding. It does not yet cover more exotic obfuscation (e.g. Unicode homoglyphs, zero-width character insertion, ROT13) — a natural extension of the same pre-processing step.
-* LLM-layer classification shows measured inconsistency on ~15% of borderline inputs, particularly around directive-assertion phrasing and casual-toned system-prompt-extraction attempts.
-* API endpoints use a single shared demo key rather than per-user authentication — appropriate for a public portfolio demo, but would need real user-scoped API keys (and likely OAuth or similar) for multi-tenant production use
-* If both LLM providers are unavailable (outage, rate limit, invalid credentials), the API returns a clean `503` rather than crashing. If only one provider is unavailable, the scanner falls back to the working provider's verdict alone, with the response explicitly noting the degraded (non-consensus) state.
+- **Tier 2 confident-safe verdicts bypass Tier 3 entirely.** The pipeline treats a low-confidence (safe) Tier 2 score as final rather than spot-checking it against Tier 3. This is a deliberate cost/latency tradeoff, but it means a confidently-wrong Tier 2 verdict currently has no safety net. Worth revisiting as Tier 2 accuracy improves.
+- **Indirect prompt injection detection** relies on the calling system correctly labeling `content_source` as `"retrieved_content"` — the scanner cannot independently verify content provenance.
+- **Encoding detection** currently covers Base64 and URL-encoding only. It does not cover hex, Unicode homoglyphs, zero-width character insertion, or ROT13.
+- **QR code scanning** reads only standard, visible QR content — it does not detect steganographically hidden payloads.
+- **No persistent audit logging in production.** The SQLite audit log (`scans.db`) works locally, but Render's filesystem is ephemeral — logs do not survive a redeploy or restart there.
+- **No API key auth or rate limiting** on any endpoint currently.
+- This project does not fetch web content or browse pages itself — it's a detection checkpoint that assumes an external system passes it content to evaluate.
+- It returns a binary threat/safe verdict on a whole piece of text, not a way to surgically strip just the malicious portion while preserving legitimate content around it.
 
 ### Beyond detection: mitigating excessive agency risk
 
-This scanner detects text that resembles SQL/tool injection or OS command injection attempts (mapped to OWASP LLM06: Excessive Agency), but detection alone doesn't eliminate risk if flagged content still reaches an LLM agent with real tool access — for example, an AI-powered scanner or agent that can authenticate, crawl, and send real HTTP requests. Text-level detection is one layer of defense, not a substitute for constraining what an agent can actually do.
-
-Downstream systems integrating this scanner into an agentic pipeline should also apply defense-in-depth principles:
-- **Restrict agent credentials and access to least privilege** — an agent should only hold the permissions necessary for its current task, not broad standing access.
-- **Separate scanning/reading identities from admin identities** — an agent that reads untrusted content should never hold credentials capable of destructive or sensitive actions.
-- **Treat a flagged verdict as a signal to halt the action pipeline**, not just log a warning — if this scanner flags content an agent is about to act on, that action should stop, not merely be recorded.
-
-These principles reflect [PortSwigger's guidance on AI-powered scanner vulnerabilities](https://portswigger.net/web-security/llm-attacks/ai-powered-scanner-vulnerabilities), which explores how agents with real tool access can be manipulated via indirect prompt injection into performing unintended, destructive, or data-exfiltrating actions from a position of trust an external attacker couldn't otherwise reach.
+This scanner detects text resembling SQL/tool injection or OS command injection (OWASP LLM06: Excessive Agency), but detection alone doesn't eliminate risk if flagged content still reaches an agent with real tool access. Downstream systems integrating this scanner should also apply defense-in-depth: least-privilege agent credentials, separating scanning identities from admin identities, and treating a flagged verdict as a signal to halt the action pipeline, not just log a warning. See [PortSwigger's guidance on AI-powered scanner vulnerabilities](https://portswigger.net/web-security/llm-attacks/ai-powered-scanner-vulnerabilities).
 
 ### QR code scanning
 
-Upload a QR code image to extract and scan its visible text content — catches injection attempts encoded directly into QR data (a "quishing"-style vector). This reads only the standard, visible content any QR scanner would see; it does not detect steganographically hidden payloads within a QR code (a separate, harder, currently-unsolved problem — see NOTES.md).
-
-⚠️ **Caution:** avoid scanning QR codes that encode live credentials or authentication tokens (e.g. WhatsApp/Telegram device-linking QRs) with this or any similar tool — decoded content is sent to external LLM providers (Gemini/Groq) as part of classification, which is appropriate for URLs and payment references but not for live secrets.
-
-### Docker
-
-A `Dockerfile` is included for containerized deployment of the FastAPI backend (not the Streamlit demo, which is deployed separately via Streamlit Cloud). It has been carefully reviewed but not build-tested locally, due to a virtualization/environment limitation on the development machine — the same `libzbar0` system dependency it installs has been verified working in the equivalent Streamlit Cloud deployment.
-
-```bash
-docker build -t ai-guardrail-scanner .
-docker run -p 8000:8000 --env-file .env ai-guardrail-scanner
-```
-
+⚠️ Avoid scanning QR codes that encode live credentials or authentication tokens with this or any similar tool — decoded content is sent to external LLM providers (Gemini/Groq) as part of classification, which is appropriate for URLs and payment references but not for live secrets.
 
 ## Running locally
 
@@ -131,11 +100,22 @@ git clone https://github.com/Bharat810/ai-guardrail-scanner.git
 cd ai-guardrail-scanner
 python -m venv venv
 venv\Scripts\activate  # Windows
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-local.txt
 ```
 
-Create a `.env` file with your own Gemini API key:
+`requirements-local.txt` adds `torch`, `transformers`, and `peft` on top of the base dependencies — needed for Tier 2 to actually run locally. Don't install these on Render or similar constrained hosts; use `CLOUD_ONLY_MODE=true` there instead.
+
+Create a `.env` file:
+```
 GEMINI_API_KEY=your_key_here
+GROQ_API_KEY=your_key_here
+```
+
+Run the backend:
+```bash
+uvicorn app.main:app --reload
+```
+
 Run the dashboard:
 ```bash
 streamlit run dashboard.py
@@ -148,4 +128,4 @@ python benchmark.py
 
 ## Project background
 
-Built as a hands-on project combining a cybersecurity background (CEH-certified) with applied AI engineering — using real, hands-on exploitation of LLM vulnerabilities (via PortSwigger Web LLM Attacks labs) to inform detection design, rather than relying on generic or assumed attack patterns.
+Built as a hands-on project combining a cybersecurity background (CEH-certified) with applied AI engineering — using real, hands-on exploitation of LLM vulnerabilities (via PortSwigger Web LLM Attacks labs) to inform detection design, rather than relying on generic or assumed attack patterns. The Tier 2 LoRA classifier is fine-tuned and iterated on via Google Colab, with each version's regressions and improvements tracked in `NOTES.md`.
