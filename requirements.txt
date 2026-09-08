@@ -8,3 +8,4 @@ slowapi
 pyzbar
 Pillow
 python-multipart
+streamlit
